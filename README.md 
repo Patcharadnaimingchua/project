@@ -41,7 +41,5 @@ JWT_REFRESH_EXPIRES_IN=7d
 	role: user
 7.Frameworks 
 	Node.jsNode.js + Express ใช้งานง่าย เหมาะกับ REST API
-	
 	DatabasePostgreSQL รองรับ relational data และ production-ready
-
 	ORMPrismaใช้งานง่าย type-safe และ migration ดี
