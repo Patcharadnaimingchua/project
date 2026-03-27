@@ -1,0 +1,30 @@
+services:
+  db:
+    image: postgres:15
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_DB: userdb
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: changeme
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  app:
+    image: node:18
+    container_name: node_app
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: sh -c "npm install && npx prisma generate && node src/server.js"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+    env_file:
+      - .env
+
+volumes:
+  pgdata:
