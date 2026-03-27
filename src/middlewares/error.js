@@ -1,7 +1,10 @@
+const { errors } = require('../utils/messages');
+
 module.exports = (err, req, res, next) => {
+  console.error(err);
+
   res.status(err.status || 500).json({
     success: false,
-    message: err.message || "เกิดข้อผิดพลาด",
-    timestamp: new Date().toISOString(),
+    message: err.message || errors.SERVER_ERROR,
   });
 };

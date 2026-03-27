@@ -13,7 +13,7 @@ model User {
   email         String   @unique @db.VarChar(255)
   password      String   @db.VarChar(255)
 
-  role          Role     @default(USER)
+  role          Role     @default(user)
   is_active     Boolean  @default(true)
 
   refresh_token String?  @db.VarChar(500)
@@ -23,6 +23,6 @@ model User {
 }
 
 enum Role {
-  ADMIN
-  USER
+  admin
+  user
 }

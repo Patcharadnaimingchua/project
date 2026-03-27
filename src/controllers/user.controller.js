@@ -1,7 +1,8 @@
-const prisma = require("../config/db");
-const bcrypt = require("bcryptjs");
+const prisma = require("../config/prisma");
+const bcrypt = require("bcrypt");
+const { messages, errors } = require("../utils/messages");
 
-// ================= GET ALL USERS (admin + pagination) =================
+// ================= GET ALL USERS (ADMIN) =================
 exports.getUsers = async (req, res, next) => {
   try {
     const page = Number(req.query.page) || 1;
@@ -19,13 +20,18 @@ exports.getUsers = async (req, res, next) => {
         email: true,
         role: true,
         is_active: true,
+        created_at: true,
+      },
+      orderBy: {
+        id: "asc",
       },
     });
 
     const totalPages = Math.ceil(totalItems / limit);
 
-    res.json({
+    return res.json({
       success: true,
+      message: messages.FETCHED,
       data: {
         users,
         pagination: {
@@ -44,32 +50,40 @@ exports.getUsers = async (req, res, next) => {
 // ================= GET USER BY ID =================
 exports.getUserById = async (req, res, next) => {
   try {
+    const id = Number(req.params.id);
+
+    // 🔥 RBAC: admin หรือ owner เท่านั้น
+    if (req.user.role !== "admin" && req.user.id !== id) {
+      return res.status(403).json({
+        success: false,
+        message: errors.FORBIDDEN,
+      });
+    }
+
     const user = await prisma.user.findUnique({
-      where: { id: Number(req.params.id) },
+      where: { id },
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
         is_active: true,
+        created_at: true,
       },
     });
 
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "ไม่พบผู้ใช้",
+        message: errors.NOT_FOUND,
       });
     }
 
-    if (req.user.id !== user.id && req.user.role !== "admin") {
-      return res.status(403).json({
-        success: false,
-        message: "ไม่มีสิทธิ์",
-      });
-    }
-
-    res.json({ success: true, data: user });
+    return res.json({
+      success: true,
+      message: messages.FETCHED,
+      data: user,
+    });
   } catch (err) {
     next(err);
   }
@@ -80,57 +94,133 @@ exports.updateUser = async (req, res, next) => {
   try {
     const id = Number(req.params.id);
 
-    if (req.user.id !== id && req.user.role !== "admin") {
+    // 🔥 RBAC: admin หรือ owner
+    if (req.user.role !== "admin" && req.user.id !== id) {
       return res.status(403).json({
         success: false,
-        message: "ไม่มีสิทธิ์",
+        message: errors.FORBIDDEN,
       });
     }
 
-    const data = { ...req.body };
+    const { name, password } = req.body;
 
-    if (data.password) {
-      data.password = await bcrypt.hash(data.password, 10);
+    const data = {};
+
+    if (name) {
+      if (name.length < 2 || name.length > 100) {
+        return res.status(400).json({
+          success: false,
+          message: errors.VALIDATION_FAILED,
+          errors: [
+            {
+              field: "name",
+              message: "ชื่อต้องมีความยาว 2-100 ตัวอักษร",
+            },
+          ],
+        });
+      }
+      data.name = name.trim();
+    }
+
+    if (password) {
+      if (password.length < 8) {
+        return res.status(400).json({
+          success: false,
+          message: errors.VALIDATION_FAILED,
+          errors: [
+            {
+              field: "password",
+              message: "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร",
+            },
+          ],
+        });
+      }
+
+      data.password = await bcrypt.hash(password, 10);
     }
 
     const user = await prisma.user.update({
       where: { id },
       data,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        is_active: true,
+      },
     });
 
-    res.json({ success: true, data: user });
+    return res.json({
+      success: true,
+      message: messages.UPDATED,
+      data: user,
+    });
   } catch (err) {
     next(err);
   }
 };
 
-// ================= DELETE USER (admin) =================
+// ================= DELETE USER (ADMIN) =================
 exports.deleteUser = async (req, res, next) => {
   try {
-    await prisma.user.delete({
-      where: { id: Number(req.params.id) },
+    const id = Number(req.params.id);
+
+    const user = await prisma.user.findUnique({
+      where: { id },
     });
 
-    res.json({
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: errors.NOT_FOUND,
+      });
+    }
+
+    await prisma.user.delete({
+      where: { id },
+    });
+
+    return res.json({
       success: true,
-      message: "ลบผู้ใช้สำเร็จ",
+      message: messages.DELETED,
     });
   } catch (err) {
     next(err);
   }
 };
 
-// ================= UPDATE STATUS (admin) =================
+// ================= UPDATE STATUS (ADMIN) =================
 exports.updateStatus = async (req, res, next) => {
   try {
-    const user = await prisma.user.update({
-      where: { id: Number(req.params.id) },
-      data: { is_active: req.body.is_active }, 
+    const id = Number(req.params.id);
+
+    const user = await prisma.user.findUnique({
+      where: { id },
     });
 
-    res.json({
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: errors.NOT_FOUND,
+      });
+    }
+
+    const updated = await prisma.user.update({
+      where: { id },
+      data: {
+        is_active: !user.is_active,
+      },
+      select: {
+        id: true,
+        is_active: true,
+      },
+    });
+
+    return res.json({
       success: true,
-      data: user,
+      message: "อัปเดตสถานะสำเร็จ",
+      data: updated,
     });
   } catch (err) {
     next(err);

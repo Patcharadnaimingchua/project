@@ -1,25 +1,26 @@
-const jwt = require("jsonwebtoken");
+const jwt = require('jsonwebtoken');
+const { errors } = require('../utils/messages');
 
 module.exports = (req, res, next) => {
   const authHeader = req.headers.authorization;
 
-  if (!authHeader) {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({
       success: false,
-      message: "กรุณาเข้าสู่ระบบ",
+      message: errors.UNAUTHORIZED,
     });
   }
 
-  const token = authHeader.split(" ")[1];
+  const token = authHeader.split(' ')[1];
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
+    req.user = decoded; // { id, role }
     next();
-  } catch {
+  } catch (err) {
     return res.status(401).json({
       success: false,
-      message: "Token ไม่ถูกต้อง",
+      message: errors.UNAUTHORIZED,
     });
   }
 };

@@ -1,0 +1,47 @@
+User Management API
+RESTful API สำหรับจัดการผู้ใช้งาน พร้อมระบบ Authentication (JWT), RBAC และ Docker
+1.วิธีติดตั้งและรันโปรเจค (Docker Compose)
+docker compose up --build
+2..env
+# ================= APP =================
+PORT=3000
+NODE_ENV=development
+
+# ================= DATABASE =================
+DB_HOST=db
+DB_PORT=5432
+DB_NAME=userdb
+DB_USER=appuser
+DB_PASSWORD=your-strong-password
+
+DATABASE_URL=postgresql://appuser:your-strong-password@db:5432/userdb
+
+# ================= JWT =================
+JWT_SECRET=your-super-secret-key
+JWT_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=7d
+3.วิธีรัน Database Migration และ Seed Data
+	docker exec -it node_app sh
+	npx prisma db push
+	npx prisma db seed
+4.วิธีรัน
+	npm test
+
+5.API Documentation (Swagger)
+	API http://localhost:3000
+	Swagger http://localhost:3000/api-docs/#/
+6.Account Admin
+	email: admin@example.com
+	password: 12345678
+	role: admin
+
+  User (สร้างผ่าน register)
+	email: user@example.com
+	password: 12345678
+	role: user
+7.Frameworks 
+	Node.jsNode.js + Express ใช้งานง่าย เหมาะกับ REST API
+	
+	DatabasePostgreSQL รองรับ relational data และ production-ready
+
+	ORMPrismaใช้งานง่าย type-safe และ migration ดี
