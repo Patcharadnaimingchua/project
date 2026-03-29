@@ -1,24 +1,35 @@
-const bcrypt = require('bcrypt');
+const bcrypt = require("bcryptjs");
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/prisma');
+const audit = require("../utils/audit");
 const { messages, errors } = require('../utils/messages');
 const { validateRegister } = require('../utils/validate');
 
-// ================= REGISTER =================
-exports.register = async (req, res) => {
-  const validationErrors = validateRegister(req.body);
+const getIP = (req) => req.headers["x-forwarded-for"] || req.ip;
 
-  if (validationErrors.length > 0) {
-    return res.status(400).json({
-      success: false,
-      message: errors.VALIDATION_FAILED,
-      errors: validationErrors
-    });
-  }
-
-  const { name, email, password, role } = req.body;
-
+const safeAudit = (data) => {
   try {
+    audit.log(data);
+  } catch (e) {
+    console.error("audit failed:", e.message);
+  }
+};
+
+// ================= REGISTER =================
+exports.register = async (req, res, next) => {
+  try {
+    const validationErrors = validateRegister(req.body);
+
+    if (validationErrors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: errors.VALIDATION_FAILED,
+        errors: validationErrors,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const { name, email, password } = req.body;
     const normalizedEmail = email.toLowerCase().trim();
 
     const existing = await prisma.user.findUnique({
@@ -28,7 +39,8 @@ exports.register = async (req, res) => {
     if (existing) {
       return res.status(409).json({
         success: false,
-        message: 'อีเมลนี้ถูกใช้งานแล้ว'
+        message: errors.EMAIL_ALREADY_EXISTS,
+        timestamp: new Date().toISOString(),
       });
     }
 
@@ -39,7 +51,7 @@ exports.register = async (req, res) => {
         name: name.trim(),
         email: normalizedEmail,
         password: hashed,
-        role: role === 'admin' ? 'admin' : 'user'
+        role: 'user'
       },
       select: {
         id: true,
@@ -49,6 +61,12 @@ exports.register = async (req, res) => {
       }
     });
 
+    safeAudit({
+      userId: user.id,
+      action: "USER_REGISTER",
+      ip: getIP(req),
+    });
+
     return res.status(201).json({
       success: true,
       message: messages.CREATED,
@@ -56,37 +74,28 @@ exports.register = async (req, res) => {
     });
 
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({
-      success: false,
-      message: errors.SERVER_ERROR
-    });
+    next(err);
   }
 };
 
 // ================= LOGIN =================
-exports.login = async (req, res) => {
-  const { email, password } = req.body;
-
-  const validationErrors = [];
-
-  if (!email) {
-    validationErrors.push({ field: 'email', message: 'กรุณากรอกอีเมล' });
-  }
-
-  if (!password) {
-    validationErrors.push({ field: 'password', message: 'กรุณากรอกรหัสผ่าน' });
-  }
-
-  if (validationErrors.length > 0) {
-    return res.status(400).json({
-      success: false,
-      message: errors.VALIDATION_FAILED,
-      errors: validationErrors
-    });
-  }
-
+exports.login = async (req, res, next) => {
   try {
+    const { email, password } = req.body;
+
+    const errorsArr = [];
+    if (!email) errorsArr.push({ field: 'email', message: 'กรุณากรอกอีเมล' });
+    if (!password) errorsArr.push({ field: 'password', message: 'กรุณากรอกรหัสผ่าน' });
+
+    if (errorsArr.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: errors.VALIDATION_FAILED,
+        errors: errorsArr,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     const normalizedEmail = email.toLowerCase().trim();
 
     const user = await prisma.user.findUnique({
@@ -94,44 +103,64 @@ exports.login = async (req, res) => {
     });
 
     if (!user) {
+      safeAudit({
+        userId: null,
+        action: "LOGIN_FAILED",
+        ip: getIP(req),
+      });
+
       return res.status(401).json({
         success: false,
-        message: errors.INVALID_CREDENTIALS
+        message: errors.INVALID_CREDENTIALS,
+        timestamp: new Date().toISOString(),
       });
     }
 
     if (!user.is_active) {
       return res.status(403).json({
         success: false,
-        message: 'บัญชีถูกปิดการใช้งาน'
+        message: errors.ACCOUNT_DISABLED,
+        timestamp: new Date().toISOString(),
       });
     }
 
     const match = await bcrypt.compare(password, user.password);
 
     if (!match) {
+      safeAudit({
+        userId: user.id,
+        action: "LOGIN_FAILED",
+        ip: getIP(req),
+      });
+
       return res.status(401).json({
         success: false,
-        message: errors.INVALID_CREDENTIALS
+        message: errors.INVALID_CREDENTIALS,
+        timestamp: new Date().toISOString(),
       });
     }
 
-    // token
     const accessToken = jwt.sign(
-      { id: user.id, role: user.role },
+      { id: user.id, role: user.role, type: "access" },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
+      { expiresIn: process.env.JWT_EXPIRES_IN || "15m" }
     );
 
     const refreshToken = jwt.sign(
-      { id: user.id, role: user.role },
+      { id: user.id, role: user.role, type: "refresh" },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
+      { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || "7d" }
     );
 
     await prisma.user.update({
       where: { id: user.id },
       data: { refresh_token: refreshToken }
+    });
+
+    safeAudit({
+      userId: user.id,
+      action: "USER_LOGIN",
+      ip: getIP(req),
     });
 
     return res.json({
@@ -142,11 +171,7 @@ exports.login = async (req, res) => {
     });
 
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({
-      success: false,
-      message: errors.SERVER_ERROR
-    });
+    next(err);
   }
 };
 
@@ -154,55 +179,66 @@ exports.login = async (req, res) => {
 exports.me = async (req, res) => {
   return res.json({
     success: true,
-    message: 'ดึงข้อมูลผู้ใช้สำเร็จ',
+    message: messages.FETCHED,
     data: req.user
   });
 };
 
 // ================= REFRESH =================
-exports.refresh = async (req, res) => {
-  let { refreshToken } = req.body;
-
-  if (refreshToken) refreshToken = refreshToken.trim();
-
-  if (!refreshToken) {
-    return res.status(400).json({
-      success: false,
-      message: 'ไม่มี refresh token'
-    });
-  }
-
+exports.refresh = async (req, res, next) => {
   try {
-    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+    let { refreshToken } = req.body;
+    if (refreshToken) refreshToken = refreshToken.trim();
+
+    if (!refreshToken) {
+      return res.status(400).json({
+        success: false,
+        message: errors.MISSING_REFRESH_TOKEN,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+    } catch {
+      return res.status(401).json({
+        success: false,
+        message: errors.INVALID_REFRESH_TOKEN,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (decoded.type !== "refresh") {
+      return res.status(401).json({
+        success: false,
+        message: errors.INVALID_TOKEN_TYPE,
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.id }
     });
 
-    if (!user || !user.refresh_token) {
+    if (!user || !user.refresh_token || user.refresh_token.trim() !== refreshToken) {
       return res.status(401).json({
         success: false,
-        message: 'refresh token ไม่ถูกต้อง'
-      });
-    }
-
-    if (user.refresh_token.trim() !== refreshToken) {
-      return res.status(401).json({
-        success: false,
-        message: 'refresh token ไม่ตรงกับระบบ'
+        message: errors.INVALID_REFRESH_TOKEN,
+        timestamp: new Date().toISOString(),
       });
     }
 
     const newAccessToken = jwt.sign(
-      { id: user.id, role: user.role },
+      { id: user.id, role: user.role, type: "access" },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
+      { expiresIn: process.env.JWT_EXPIRES_IN || "15m" }
     );
 
     const newRefreshToken = jwt.sign(
-      { id: user.id, role: user.role },
+      { id: user.id, role: user.role, type: "refresh" },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
+      { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || "7d" }
     );
 
     await prisma.user.update({
@@ -210,39 +246,88 @@ exports.refresh = async (req, res) => {
       data: { refresh_token: newRefreshToken }
     });
 
+    safeAudit({
+      userId: user.id,
+      action: "REFRESH_TOKEN",
+      ip: getIP(req),
+    });
+
     return res.json({
       success: true,
-      message: 'ออก access token ใหม่สำเร็จ',
+      message: messages.REFRESH_SUCCESS,
       accessToken: newAccessToken,
       refreshToken: newRefreshToken
     });
 
   } catch (err) {
-    console.error(err);
-    return res.status(401).json({
-      success: false,
-      message: 'refresh token ไม่ถูกต้อง'
-    });
+    next(err);
   }
 };
 
 // ================= LOGOUT =================
-exports.logout = async (req, res) => {
+exports.logout = async (req, res, next) => {
   try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        success: false,
+        message: errors.UNAUTHORIZED,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch {
+      return res.status(401).json({
+        success: false,
+        message: errors.INVALID_TOKEN,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (decoded.type !== "access") {
+      return res.status(401).json({
+        success: false,
+        message: errors.INVALID_TOKEN_TYPE,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const existing = await prisma.blacklistToken.findUnique({
+      where: { token },
+    });
+
+    if (!existing) {
+      await prisma.blacklistToken.create({
+        data: {
+          token,
+          expired_at: new Date(decoded.exp * 1000),
+        },
+      });
+    }
+
     await prisma.user.update({
-      where: { id: req.user.id },
-      data: { refresh_token: null }
+      where: { id: decoded.id },
+      data: { refresh_token: null },
+    });
+
+    safeAudit({
+      userId: decoded.id,
+      action: "USER_LOGOUT",
+      ip: getIP(req),
     });
 
     return res.json({
       success: true,
-      message: 'ออกจากระบบสำเร็จ'
+      message: messages.LOGOUT_SUCCESS,
     });
 
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: errors.SERVER_ERROR
-    });
+    next(err);
   }
 };

@@ -1,5 +1,5 @@
-const { PrismaClient } = require("@prisma/client");
-const bcrypt = require("bcrypt");
+const { PrismaClient, Role } = require("@prisma/client");
+const bcrypt = require("bcryptjs");
 
 const prisma = new PrismaClient();
 
@@ -16,15 +16,15 @@ async function main() {
     await prisma.user.create({
       data: {
         name: "Admin",
-        email: email,
+        email,
         password: hashedPassword,
-        role: "admin",
+        role: Role.admin, 
       },
     });
 
-    console.log("✅ Admin user created");
+    console.log("Admin user created");
   } else {
-    console.log("ℹ️ Admin already exists");
+    console.log("Admin already exists");
   }
 }
 
@@ -33,6 +33,6 @@ main()
     console.error(e);
     process.exit(1);
   })
-  .finally(() => {
-    prisma.$disconnect();
+  .finally(async () => {
+    await prisma.$disconnect();
   });

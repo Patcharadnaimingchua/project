@@ -3,13 +3,15 @@ const router = express.Router();
 
 const userController = require("../controllers/user.controller");
 const authMiddleware = require("../middlewares/auth");
+const { errors } = require("../utils/messages");
 
-// 🔥 FIX: role ต้องเป็น lowercase
+// admin middleware
 const isAdmin = (req, res, next) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({
       success: false,
-      message: "คุณไม่มีสิทธิ์เข้าถึงข้อมูลนี้",
+      message: errors.FORBIDDEN,
+      timestamp: new Date().toISOString(),
     });
   }
   next();
@@ -41,11 +43,33 @@ const isAdmin = (req, res, next) => {
  *         schema:
  *           type: integer
  *           example: 10
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *           example: john
+ *       - in: query
+ *         name: role
+ *         schema:
+ *           type: string
+ *           example: admin
+ *       - in: query
+ *         name: sort
+ *         schema:
+ *           type: string
+ *           example: created_at
+ *       - in: query
+ *         name: order
+ *         schema:
+ *           type: string
+ *           example: desc
  *     responses:
  *       200:
- *         description: สำเร็จ
+ *         description: ดึงข้อมูลสำเร็จ
+ *       401:
+ *         description: ไม่ได้ login หรือ token ไม่ถูกต้อง
  *       403:
- *         description: ไม่มีสิทธิ์
+ *         description: ไม่มีสิทธิ์ (ไม่ใช่ admin)
  */
 router.get("/", authMiddleware, isAdmin, userController.getUsers);
 
@@ -65,9 +89,11 @@ router.get("/", authMiddleware, isAdmin, userController.getUsers);
  *           type: integer
  *     responses:
  *       200:
- *         description: สำเร็จ
+ *         description: ดึงข้อมูลสำเร็จ
+ *       401:
+ *         description: ไม่ได้ login หรือ token ไม่ถูกต้อง
  *       403:
- *         description: ไม่มีสิทธิ์
+ *         description: ไม่มีสิทธิ์ (ไม่ใช่เจ้าของหรือ admin / account ถูกปิด)
  *       404:
  *         description: ไม่พบผู้ใช้
  */
@@ -93,14 +119,18 @@ router.get("/:id", authMiddleware, userController.getUserById);
  *         application/json:
  *           example:
  *             name: "John Doe"
- *             password: "12345678"
+ *             password: "abc12345"
  *     responses:
  *       200:
  *         description: อัปเดตสำเร็จ
  *       400:
- *         description: ข้อมูลไม่ถูกต้อง
+ *         description: ข้อมูลไม่ถูกต้อง (validation failed)
+ *       401:
+ *         description: ไม่ได้ login หรือ token ไม่ถูกต้อง
  *       403:
- *         description: ไม่มีสิทธิ์
+ *         description: ไม่มีสิทธิ์ (ไม่ใช่เจ้าของหรือ admin / account ถูกปิด)
+ *       404:
+ *         description: ไม่พบผู้ใช้
  */
 router.put("/:id", authMiddleware, userController.updateUser);
 
@@ -121,8 +151,10 @@ router.put("/:id", authMiddleware, userController.updateUser);
  *     responses:
  *       200:
  *         description: ลบสำเร็จ
+ *       401:
+ *         description: ไม่ได้ login หรือ token ไม่ถูกต้อง
  *       403:
- *         description: ไม่มีสิทธิ์
+ *         description: ไม่มีสิทธิ์ (ไม่ใช่ admin)
  *       404:
  *         description: ไม่พบผู้ใช้
  */
@@ -145,8 +177,10 @@ router.delete("/:id", authMiddleware, isAdmin, userController.deleteUser);
  *     responses:
  *       200:
  *         description: อัปเดตสถานะสำเร็จ
+ *       401:
+ *         description: ไม่ได้ login หรือ token ไม่ถูกต้อง
  *       403:
- *         description: ไม่มีสิทธิ์
+ *         description: ไม่มีสิทธิ์ (ไม่ใช่ admin หรือ account ถูกปิด)
  *       404:
  *         description: ไม่พบผู้ใช้
  */

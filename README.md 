@@ -1,45 +1,80 @@
 User Management API
-RESTful API สำหรับจัดการผู้ใช้งาน พร้อมระบบ Authentication (JWT), RBAC และ Docker
-1.วิธีติดตั้งและรันโปรเจค (Docker Compose)
-docker compose up --build
-2..env
-# ================= APP =================
-PORT=3000
-NODE_ENV=development
+RESTful API สำหรับจัดการผู้ใช้งาน พร้อม Authentication (JWT), Authorization (RBAC) และ Swagger Documentation
+1. ขั้นตอนติดตั้งและรัน Project ด้วย Docker Compose
+	- docker compose up --build
 
-# ================= DATABASE =================
-DB_HOST=db
-DB_PORT=5432
-DB_NAME=userdb
-DB_USER=appuser
-DB_PASSWORD=your-strong-password
+2.Environment Variables
+	- PORT=3000
+	- NODE_ENV=development
 
-DATABASE_URL=postgresql://appuser:your-strong-password@db:5432/userdb
+	- DB_HOST=db
+	- DB_PORT=5432
+	- DB_NAME=userdb
+	- DB_USER=appuser
+	- DB_PASSWORD=changeme
 
-# ================= JWT =================
-JWT_SECRET=your-super-secret-key
-JWT_EXPIRES_IN=15m
-JWT_REFRESH_EXPIRES_IN=7d
+	- DATABASE_URL=postgresql://appuser:changeme@db:5432/userdb
+
+	- JWT_SECRET=supersecret
+	- JWT_EXPIRES_IN=15m
+	- JWT_REFRESH_EXPIRES_IN=7d
+
 3.วิธีรัน Database Migration และ Seed Data
-	docker exec -it node_app sh
-	npx prisma db push
-	npx prisma db seed
-4.วิธีรัน
-	npm test
+	Migration
+		- docker exec -it node_app npx prisma migrate deploy
+	Seed (สร้าง admin)
+	 	- docker exec -it node_app npx prisma db seed
 
-5.API Documentation (Swagger)
-	API http://localhost:3000
-	Swagger http://localhost:3000/api-docs/#/
-6.Account Admin
-	email: admin@example.com
-	password: 12345678
-	role: admin
+4.วิธีรัน Test Suite
+	- docker exec -it node_app npm test
 
-  User (สร้างผ่าน register)
-	email: user@example.com
-	password: 12345678
-	role: user
-7.Frameworks 
-	Node.jsNode.js + Express ใช้งานง่าย เหมาะกับ REST API
-	DatabasePostgreSQL รองรับ relational data และ production-ready
-	ORMPrismaใช้งานง่าย type-safe และ migration ดี
+5. Link ไปยัง API Documentation (Swagger)
+	- http://localhost:3000/api-docs
+
+ุ6.Account Admin และ User สำหรับทดสอบที่สรางจาก Seed
+	admin
+	- Email: admin@example.com
+	- Password: 12345678
+	ใช้ Admin สำหรับทดสอบ endpoint ที่ต้องใช้สิทธิ์
+	user
+	- สามารถสมัครผ่าน API 
+
+7. Framework และ Database ที่เลือกพร้อมเหตุผล
+	Framework: Node.js + Express.js
+	เลือกใช้ Express.js เนื่องจาก:
+		- เป็น framework ที่มีขนาดเล็ก (lightweight) และยืดหยุ่นสูง
+		- เหมาะสำหรับพัฒนา RESTful API
+		- มี ecosystem ใหญ่ และรองรับ middleware จำนวนมาก
+		- เข้าใจง่าย เหมาะกับการพัฒนาและขยายระบบในอนาค
+	Database: PostgreSQL
+	เลือกใช้ PostgreSQL เนื่องจาก:
+		- เป็น relational database ที่มีความเสถียรและนิยมใน production
+		- รองรับความสัมพันธ์ของข้อมูล (relations) ได้ดี
+		- มีความสามารถด้าน query ที่ทรงพลัง
+		- รองรับ transaction และ data integrity สูง
+	ORM: Prisma
+	เลือกใช้ Prisma เนื่องจาก:
+		- ใช้งานง่าย และลดความซับซ้อนของการเขียน SQL
+		- มี type safety ช่วยลด error ในการพัฒนา
+		- รองรับ migration และ seed database ได้สะดวก
+		- ทำงานร่วมกับ PostgreSQL ได้อย่างมีประสิทธิภาพ
+	Authentication: JWT (JSON Web Token)
+	เลือกใช้ JWT เนื่องจาก:
+		- เหมาะสำหรับระบบที่เป็น REST API (stateless)
+		- สามารถจัดการ authentication และ authorization ได้ง่าย
+		- รองรับการใช้งานร่วมกับ refresh token เพื่อเพิ่มความปลอดภัย
+	API Documentation: Swagger
+	เลือกใช้ Swagger เนื่องจาก:
+		- สามารถสร้างเอกสาร API อัตโนมัติจากโค้ด
+		- มี UI สำหรับทดสอบ API ได้ทันที
+		- ช่วยให้ผู้ใช้งานเข้าใจ API ได้ง่ายขึ้น
+	Testing: Jest + Supertest
+	เลือกใช้เนื่องจาก:
+		- Jest เป็น testing framework ที่ใช้งานง่ายและนิยม
+		- Supertest ใช้สำหรับทดสอบ HTTP API ได้โดยตรง
+		- สามารถทดสอบ endpoint จริงได้โดยไม่ต้องเปิด server
+	Containerization: Docker + Docker Compose
+	เลือกใช้เนื่องจาก:
+		- ทำให้สามารถรันโปรเจคได้เหมือนกันทุกเครื่อง
+		- ลดปัญหา environment ไม่ตรงกัน
+		- ช่วยให้ setup ระบบ (backend + database) ได้ง่ายในคำสั่งเดียว

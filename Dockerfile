@@ -1,8 +1,14 @@
 FROM node:18
+
 WORKDIR /app
+
 COPY package*.json ./
 RUN npm install
+
 COPY . .
-RUN npx prisma generate  
+
+RUN npx prisma generate
+
 EXPOSE 3000
-CMD ["npm", "run", "dev"]
+
+CMD ["sh", "-c", "sleep 5 && npx prisma migrate deploy && node src/server.js"]

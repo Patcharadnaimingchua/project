@@ -3,6 +3,7 @@ const router = express.Router();
 
 const authController = require("../controllers/auth.controller");
 const authMiddleware = require("../middlewares/auth");
+const { loginLimiter } = require("../middlewares/rateLimit");
 
 /**
  * @swagger
@@ -21,16 +22,26 @@ const authMiddleware = require("../middlewares/auth");
  *       required: true
  *       content:
  *         application/json:
- *           example:
- *             name: "John Doe"
- *             email: "john@example.com"
- *             password: "12345678"
- *             role: "user"
+ *           schema:
+ *             type: object
+ *             required: [name, email, password]
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 example: John Doe
+ *               email:
+ *                 type: string
+ *                 example: john@example.com
+ *               password:
+ *                 type: string
+ *                 example: abc12345
  *     responses:
  *       201:
  *         description: สมัครสำเร็จ
  *       400:
- *         description: ข้อมูลไม่ถูกต้อง
+ *         description: ข้อมูลไม่ถูกต้อง (validation)
+ *       409:
+ *         description: อีเมลนี้ถูกใช้งานแล้ว
  */
 router.post("/register", authController.register);
 
@@ -44,16 +55,29 @@ router.post("/register", authController.register);
  *       required: true
  *       content:
  *         application/json:
- *           example:
- *             email: "john@example.com"
- *             password: "12345678"
+ *           schema:
+ *             type: object
+ *             required: [email, password]
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: john@example.com
+ *               password:
+ *                 type: string
+ *                 example: abc12345
  *     responses:
  *       200:
  *         description: เข้าสำเร็จ
+ *       400:
+ *         description: ข้อมูลไม่ถูกต้อง (เช่น ไม่กรอก email/password)
  *       401:
- *         description: ข้อมูลไม่ถูกต้อง
+ *         description: อีเมลหรือรหัสผ่านไม่ถูกต้อง
+ *       403:
+ *         description: บัญชีถูกปิดการใช้งาน
+ *       429:
+ *         description: พยายามเข้าสู่ระบบบ่อยเกินไป (Rate limit)
  */
-router.post("/login", authController.login);
+router.post("/login", loginLimiter, authController.login);
 
 /**
  * @swagger
@@ -67,7 +91,7 @@ router.post("/login", authController.login);
  *       200:
  *         description: ออกจากระบบสำเร็จ
  *       401:
- *         description: ไม่มีสิทธิ์
+ *         description: ไม่มีสิทธิ์ (token ไม่ถูกต้อง หรือไม่ส่ง token)
  */
 router.post("/logout", authMiddleware, authController.logout);
 
@@ -83,7 +107,7 @@ router.post("/logout", authMiddleware, authController.logout);
  *       200:
  *         description: สำเร็จ
  *       401:
- *         description: ไม่มีสิทธิ์
+ *         description: ไม่มีสิทธิ์ (token ไม่ถูกต้อง หรือไม่ส่ง token)
  */
 router.get("/me", authMiddleware, authController.me);
 
@@ -97,13 +121,20 @@ router.get("/me", authMiddleware, authController.me);
  *       required: true
  *       content:
  *         application/json:
- *           example:
- *             refreshToken: "your-refresh-token"
+ *           schema:
+ *             type: object
+ *             required: [refreshToken]
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *                 example: your-refresh-token
  *     responses:
  *       200:
  *         description: ได้ access token ใหม่
+ *       400:
+ *         description: ไม่มี refresh token
  *       401:
- *         description: refresh token ไม่ถูกต้อง
+ *         description: refresh token ไม่ถูกต้อง / หมดอายุ / ไม่ตรงกับระบบ
  */
 router.post("/refresh", authController.refresh);
 

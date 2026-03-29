@@ -5,6 +5,7 @@ exports.isAdmin = (req, res, next) => {
     return res.status(403).json({
       success: false,
       message: errors.FORBIDDEN,
+      timestamp: new Date().toISOString(),
     });
   }
   next();

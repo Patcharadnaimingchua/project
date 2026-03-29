@@ -1,16 +1,17 @@
 exports.validateRegister = (body) => {
   const errors = [];
 
-  if (!body.name || body.name.length < 2 || body.name.length > 100) {
+  if (!body.name || body.name.trim().length < 2 || body.name.trim().length > 100) {
     errors.push({
       field: 'name',
       message: 'ชื่อต้องมีความยาว 2-100 ตัวอักษร',
     });
   }
 
+  const email = body.email?.toLowerCase().trim();
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-  if (!body.email || !emailRegex.test(body.email)) {
+  if (!email || !emailRegex.test(email)) {
     errors.push({
       field: 'email',
       message: 'รูปแบบอีเมลไม่ถูกต้อง',
